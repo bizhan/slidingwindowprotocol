@@ -1,6 +1,5 @@
- /* File 	: transmitter.c */
+/* File 	: transmitter.c */
 #include "transmitter.h"
-#include "receiver.h"
 
 /* NETWORKS */
 int sockfd, port;		// sock file descriptor and port number
@@ -55,35 +54,26 @@ int main(int argc, char *argv[]) {
 	// this is the parent process
 	// use as char transmitter from the text file
 	// connect to receiver, and read the file per character
-	int counter = 0;
-	while(1)  {
+	int counter = 1;
+	while ((buf[0] = fgetc(tFile)) != EOF) {
 		if (isXON) {
-			char data[BUFMAX];
-			int i=0;
-			while(1) {
-				if(data[i]=fgetc(tFile)==EOF) break;
-				i++;
-				if(i==BUFMAX) break;
-			}
-			if(data[0]==EOF) break;	
-			MESGB msg = {SOH,STX,ETX,0,counter++,data};
-
 			char string[128];
-			memcpy(string,&msg,sizeof(MESGB));
-			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) > sizeof(MESGB))
+			MESGB msg = {SOH,STX,ETX,0,counter,data};
+			memcpy(string,msg,sizeof(MESGB));
+			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
 				error("ERROR: sendto() sent buffer with size more than expected.\n");
 			
-			printf("Sending byte no. %d: ", counter);
-			switch (msg.data[0]) {
+			printf("Sending byte no. %d: ", counter++);
+			switch (buf[0]) {
 				case CR:	printf("\'Carriage Return\'\n");
 							break;
 				case LF:	printf("\'Line Feed\'\n");
 							break;
 				case Endfile:
-							printf("\'End of File\'\n");
-							break;
+						printf("\'End of File\'\n");
+						break;
 				case 255:	break;
-				default:	printf("\'%c\'\n", data[0]);
+				default:	printf("\'%c\'\n", buf[0]);
 							break;
 			}
 		} else {
@@ -136,5 +126,6 @@ void *childProcess(void *threadid) {
 			printf("What the hell man?\n");
 		}
 	}
+
 	pthread_exit(NULL);
 }
