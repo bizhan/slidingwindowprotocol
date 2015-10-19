@@ -59,11 +59,8 @@ int main(int argc, char *argv[]) {
 	while ((buf[0] = fgetc(tFile)) != EOF) {
 		if (isXON) {
 			char string[128];
-			MESGB msg = {SOH,STX,ETX,0,counter,buf};
-			memcpy(string,&msg,sizeof(MESGB));
-			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
-				error("ERROR: sendto() sent buffer with size more than expected.\n");
-			
+			MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter};
+			strcpy(msg.data, buf);
 			printf("Sending byte no. %d: ", counter++);
 			switch (buf[0]) {
 				case CR:	printf("\'Carriage Return\'\n");
@@ -74,9 +71,12 @@ int main(int argc, char *argv[]) {
 						printf("\'End of File\'\n");
 						break;
 				case 255:	break;
-				default:	printf("\'%c\'\n", buf[0]);
+				default:	printf("\'%c\'\n", msg.data[0]);
 							break;
 			}
+			memcpy(string,&msg,sizeof(MESGB));
+			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
+				error("ERROR: sendto() sent buffer with size more than expected.\n");
 		} else {
 			while (!isXON) {
 				printf("Waiting for XON...\n");

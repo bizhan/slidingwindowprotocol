@@ -72,7 +72,7 @@ static Byte *rcvchar(int sockfd, QTYPE *queue)
  	/* Insert code here. Read a character from socket and put it to the receive buffer.
  	If the number of characters in the receive buffer is above certain level, then send
  	XOFF and set a flag (why?). Return a pointer to the buffer where data is put. */
- 	Byte* current;
+ 	Byte* current = (Byte *) malloc(sizeof(Byte));
  	char tempBuf[1];
  	char b[1];
  	static int counter = 1;
@@ -80,21 +80,19 @@ static Byte *rcvchar(int sockfd, QTYPE *queue)
  	char string[128];
  	MESGB *pmsg =(MESGB *) malloc(sizeof(MESGB));
 
- 	if (recvfrom(sockfd, string, sizeof(MESGB), 0, (struct sockaddr *) &srcAddr, &srcLen) < sizeof(MESGB))
+ 	if(recvfrom(sockfd, string, sizeof(MESGB), 0, (struct sockaddr *) &srcAddr, &srcLen) < sizeof(MESGB))
  		error("ERROR: Failed to receive character from socket\n");
  	printf("\n");
  	memcpy(pmsg,string,sizeof(MESGB));
- 	
- 	if (pmsg->checksum != cksum(pmsg->data, 4)){
- 		error("ERROR : Data %d received are broken", pmsg->msgno);
+ 	/*
+ 	if (pmsg->checksum != cksum(pmsg->data, 4)) {
+ 		printf("ERROR : Data %d", pmsg->msgno); 
+ 		error("received are broken");
  		//do request the data again
- 	}
-
- 	current = (Byte *) malloc(sizeof(Byte));
- 	//printf("%s\n", );
- 	//*current = (Byte *) pmsg->data->txt[0];
-
+ 	} 
  	if (*current != Endfile) {
+ 	current = (Byte *) pmsg->data[0];*/
+ 	if(pmsg->data[0] != Endfile) {
  		printf("Receiving byte no. %d: ", counter++);
 		switch (*current) {
 			case CR:	printf("\'Carriage Return\'\n");
@@ -165,7 +163,7 @@ static Byte *q_get(QTYPE *queue, Byte *data)
  		if (queue->front == 8) queue->front = 0;
  		queue->count--;
 
- 		printf("CONSUME! Consuming byte no. %d: ", counter++);
+ 		//printf("CONSUME! Consuming byte no. %d: ", counter++);
 		switch (*current) {
 			case CR:	printf("\'Carriage Return\'\n");
 						break;
@@ -175,7 +173,7 @@ static Byte *q_get(QTYPE *queue, Byte *data)
 						printf("\'End of File\'\n");
 						break;
 			case 255:	break;
-			default:	printf("\'%c\'\n", *current);
+			default:	//printf("\'%c\'\n", *current);
 						break;
 		}
  	}
