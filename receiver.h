@@ -44,6 +44,8 @@
 #define DELAY 500
 /* Define receive buffer size */
 #define RXQSIZE 8
+#define BUFMAX 1	/* Maximum size of buffer that can be sent */
+
 
 typedef unsigned char Byte;
 typedef struct QTYPE {
@@ -53,7 +55,6 @@ typedef struct QTYPE {
  	unsigned int maxsize;
  	Byte *data;
 } QTYPE;
-
 
 typedef struct MESGB {
  	unsigned int soh;

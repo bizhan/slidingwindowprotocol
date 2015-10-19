@@ -51,26 +51,30 @@ int main(int argc, char *argv[]) {
 
 	if (pthread_create(&thread[0], NULL, childProcess, 0) != 0) 
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
-	//INI NGISI MESGB
-	int i = 0;
-	char data[BUFMAX+1];
-	while(i<BUFMAX && (data[i]  = fgetc(tFile) != EOF)) 
-		i++;	
-	MESGB msg = {SOH,STX,ETX,0,0,data};
-	char string[128];
-	memcpy(string,&msg,sizeof(MESGB));
-	///SELESAI///
+	
 	// this is the parent process
 	// use as char transmitter from the text file
 	// connect to receiver, and read the file per character
-	int counter = 1;
-	while ((msg.data[0] = fgetc(tFile)) != EOF) {
+	int counter = 0;
+	while(1)  {
 		if (isXON) {
+			char data[BUFMAX];
+			int i=0;
+			while(1) {
+				if(data[i]=fgetc(tFile)==EOF) break;
+				i++;
+				if(i==BUFMAX) break;
+			}
+			if(data[0]==EOF) break;	
+			MESGB msg = {SOH,STX,ETX,0,counter++,data};
+
+			char string[128];
+			memcpy(string,&msg,sizeof(MESGB));
 			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) > sizeof(MESGB))
 				error("ERROR: sendto() sent buffer with size more than expected.\n");
 			
-			printf("Sending byte no. %d: ", counter++);
-			switch (input.txt[0]) {
+			printf("Sending byte no. %d: ", counter);
+			switch (msg.data[0]) {
 				case CR:	printf("\'Carriage Return\'\n");
 							break;
 				case LF:	printf("\'Line Feed\'\n");
@@ -79,7 +83,7 @@ int main(int argc, char *argv[]) {
 							printf("\'End of File\'\n");
 							break;
 				case 255:	break;
-				default:	printf("\'%c\'\n", input.txt[0]);
+				default:	printf("\'%c\'\n", data[0]);
 							break;
 			}
 		} else {
