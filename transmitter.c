@@ -1,6 +1,7 @@
  /* File 	: transmitter.c */
 #include "transmitter.h"
 #include "receiver.h"
+#include "cksum.h"
 
 /* NETWORKS */
 int sockfd, port;		// sock file descriptor and port number
@@ -56,7 +57,9 @@ int main(int argc, char *argv[]) {
 	char data[BUFMAX+1];
 	while(i<BUFMAX && (data[i]  = fgetc(tFile) != EOF)) 
 		i++;	
-	MESGB msg = {SOH,STX,ETX,0,0,data};
+	
+	MESGB msg = {SOH,STX,ETX,cksum(data, BUFMAX+1),0,data};
+
 	char string[128];
 	memcpy(string,&msg,sizeof(MESGB));
 	///SELESAI///

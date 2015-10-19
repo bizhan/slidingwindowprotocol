@@ -84,6 +84,12 @@ static Byte *rcvchar(int sockfd, QTYPE *queue)
  		error("ERROR: Failed to receive character from socket\n");
  	printf("\n");
  	memcpy(pmsg,string,sizeof(MESGB));
+ 	
+ 	if (pmsg->checksum != cksum(pmsg->data, 4)){
+ 		error("ERROR : Data %d received are broken", pmsg->msgno);
+ 		//do request the data again
+ 	}
+
  	current = (Byte *) malloc(sizeof(Byte));
  	//printf("%s\n", );
  	//*current = (Byte *) pmsg->data->txt[0];
