@@ -1,5 +1,6 @@
 /* File 	: transmitter.c */
 #include "transmitter.h"
+#include "receiver.h"
 
 /* NETWORKS */
 int sockfd, port;		// sock file descriptor and port number
@@ -10,7 +11,7 @@ int receiverAddrLen = sizeof(receiverAddr);
 /* FILE AND BUFFERS */
 FILE *tFile;			// file descriptor
 char *receiverIP;		// buffer for Host IP address
-char buf[BUFMAX+1];		// buffer for character to send
+char buf[BUFMAX];		// buffer for character to send
 char xbuf[BUFMAX+1];	// buffer for receiving XON/XOFF characters
 
 /* FLAGS */
@@ -58,8 +59,8 @@ int main(int argc, char *argv[]) {
 	while ((buf[0] = fgetc(tFile)) != EOF) {
 		if (isXON) {
 			char string[128];
-			MESGB msg = {SOH,STX,ETX,0,counter,data};
-			memcpy(string,msg,sizeof(MESGB));
+			MESGB msg = {SOH,STX,ETX,0,counter,buf};
+			memcpy(string,&msg,sizeof(MESGB));
 			if (sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
 				error("ERROR: sendto() sent buffer with size more than expected.\n");
 			
