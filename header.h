@@ -28,10 +28,6 @@
 #define Endfile 26 /* End of file character */
 #define ESC 27 /* ESC key */ 
 
-/* XON/XOFF protocol */ 
-#define XON (0x11) 
-#define XOFF (0x13) 
-
 /* Const */ 
 #define BYTESIZE 256 /* The maximum value of a byte */
 #define MAXLEN 1024 /* Maximum messages length */ 
@@ -40,21 +36,13 @@
 #define MAX_LOWERLIMIT 2
 
 #define bzero(p, size) (void)memset((p), 0 , (size))
-/* Delay to adjust speed of consuming buffer, in milliseconds */
 #define DELAY 500
 /* Define receive buffer size */
-#define RXQSIZE 8
+#define WINDOWSIZE 5
 #define BUFMAX 1	/* Maximum size of buffer that can be sent */
 
 
 typedef unsigned char Byte;
-typedef struct QTYPE {
- 	unsigned int count;
- 	unsigned int front;
- 	unsigned int rear;
- 	unsigned int maxsize;
- 	Byte *data;
-} QTYPE;
 
 typedef struct MESGB {
  	unsigned int soh;
@@ -65,13 +53,23 @@ typedef struct MESGB {
  	char data[1];
 } MESGB;
 
+typedef struct QTYPE {
+ 	unsigned int count;
+ 	unsigned int front;
+ 	unsigned int rear;
+ 	unsigned int maxsize;
+ 	MESGB *window;
+} QTYPE;
+
+typedef struct RESPL {
+	unsigned int ack;
+	Byte msgno;
+	Byte checksum;
+} RESPL;
+
 /* FUNCTIONS AND PROCEDURES */
-static Byte *rcvchar(int sockfd, QTYPE *queue);
-
-static Byte *q_get(QTYPE *, Byte *);
-
 void *childRProcess(void * threadid);
-
+void *childProcess(void *threadid);
 void error(const char* message);
 
 #endif
