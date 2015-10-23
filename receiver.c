@@ -13,7 +13,7 @@ int endFileReceived;
 int sockfd; // listen on sock_fd
 struct sockaddr_in adhost;
 struct sockaddr_in srcAddr;
-socklen_t srcLen = sizeof(srcAddr);
+int srcLen = sizeof(srcAddr);
 
 int main(int argc, char *argv[])
 {
@@ -77,6 +77,7 @@ MESGB *rcvframe(int sockfd, QTYPE *queue) {
 }
 
 void *childRProcess(void *threadid) {
+ 	MESGB *current;
  	while(1) {
  		current = q_get(rxq);
  		sleep(DELAY);
@@ -102,7 +103,7 @@ MESGB *q_get(QTYPE *queue) {
 			RESPL rsp = {NAK, current->msgno, 0};
 		}		
  		memcpy(string,&rsp,sizeof(RESPL));
-		if(sendto(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) != sizeof(RESPL))
+		if(sendto(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, srcLen) < sizeof(RESPL))
 			error("ERROR: sendto() sent frame with size more than expected.\n");
  	}
  	return current;
