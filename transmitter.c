@@ -9,15 +9,35 @@ int receiverAddrLen = sizeof(receiverAddr);
 
 /* FILE AND BUFFERS */
 FILE *tFile;			// file descriptor
-char *receiverIP;		// buffer for Host IP address
-char buf[BUFMAX];		// buffer for character to send
-char xbuf[BUFMAX+1];	// buffer for receiving XON/XOFF characters
+char buf[BUFMAX];		// buffer for read characters
+
+/* WINDOW */ 
+MESGB rxbuf[WINDOWSIZE];
+QTYPE trmq = { 0, 0, 0, WINDOWSIZE, rxbuf};
+QTYPE *rxq = &trmq;
+
+/* SEND WINDOW */
+MESGB rxsend[WINDOWSIZE];
+QTYPE trsend = { 0, 0, 0, WINDOWSIZE, rxsend};
+QTYPE *rxnd = &trsend;
+
+/* QTEMP */
+RESPL tab[WINDOWSIZE];
+QTemp temp = { 0, 0, 0, WINDOWSIZE, tab};
+QTemp *ptemp = &temp;
 
 /* FLAGS */
 int isSocketOpen;	// flag to indicate if connection from socket is done
+int headError; //indicate error in sending head window
+
+/* VOIDS */
+void *firstChild(void *threadid);
+void *secondChild(void *threadid);
+void receiveACK(QTYPE *queue, QTemp *temp);
+void sendFrame(QTYPE *qsend);
 
 int main(int argc, char *argv[]) {
-	pthread_t thread[1];
+	pthread_t thread[2];
 
 	if (argc < 4) {
 		// case if arguments are less than specified
@@ -44,33 +64,40 @@ int main(int argc, char *argv[]) {
 
 	// open the text file
 	tFile = fopen(argv[argc-1], "r");
-	if (tFile == NULL) 
+	if(tFile == NULL) 
 		error("ERROR: File text not Found.\n");
 
-	if (pthread_create(&thread[0], NULL, childProcess, 0) != 0) 
+	// sending frame thread
+	if(pthread_create(&thread[0], NULL, firstChild, 0) != 0) 
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
-	
-	// this is the parent process
-	// use as char transmitter from the text file
-	// connect to receiver, and read the file per character
+
+	// receiving ack thread
+	headError = 0;
+	if(pthread_create(&thread[1], NULL, secondChild, 0) != 0) 
+		error("ERROR: Failed to create thread for child. Please free some space.\n");
+
+	// parent process
 	int counter = 0;
-	char string[128];
-	while((buf[0] = fgetc(tFile)) != EOF) {
-		MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter};
+	while(1) {
+		buf[0] = fgetc(tFile);
+		MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter++};
 		strcpy(msg.data, buf);
-		printf("Sending byte no. %d: \'%c\'\n", counter++,msg.data[0]);
-		memcpy(string,&msg,sizeof(MESGB));
-		if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
-			error("ERROR: sendto() sent buffer with size more than expected.\n");
+		while(trmq.count==WINDOWSIZE); //wait for sending process
+ 		trmq.window[trmq.rear] = msg;
+ 		trmq.rear++;
+ 		if(trmq.rear==WINDOWSIZE) trmq.rear=0;
+ 		trmq.count++;
+ 		//adding to queue send
+ 		while(trsend.count==WINDOWSIZE);
+ 		trsend.window[trsend.rear] = msg;
+ 		trsend.rear++;
+ 		if(trsend.rear==WINDOWSIZE) trsend.rear=0;
+ 		trsend.count++;
 		sleep(DELAY);
+		if(buf[0]==EOF) break;
 	}
 
 	// sending endfile to receiver, marking the end of data transfer
-	MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter};
-	strcpy(msg.data, buf);
-	memcpy(string,&msg,sizeof(MESGB));
-	if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
-		error("ERROR: sendto() sent buffer with size more than expected.\n");
 	printf("Sending EOF");
 	fclose(tFile);
 	
@@ -86,9 +113,40 @@ void error(const char *message) {
 	exit(1);
 }
 
-void *childProcess(void *threadid) {
-	// child process
-	// read if there is XON/XOFF sent by receiver using recvfrom()
+void *firstChild(void *threadid) {
+	//this thread used for sending frame process
+	while(1) {
+		sendFrame(rxnd);
+		sleep(DELAY);
+	}
+	pthread_exit(NULL);
+}
+
+void sendFrame(QTYPE *qsend) {
+	//child process for sending frame
+	char string[128];
+	if(qsend->count) {
+		printf("Sending frame no. %d: \'%c\'\n", qsend->window[qsend->front].msgno, qsend->window[qsend->front].data[0]);
+		memcpy(string,&qsend->window[qsend->front],sizeof(MESGB));
+		if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
+			error("ERROR: sendto() sent frame with size more than expected.\n");
+		qsend->front++;
+		if(qsend->front==WINDOWSIZE) qsend->front=0;
+		qsend->count--;
+	}
+}
+
+void *secondChild(void *threadid) {
+	//this thread used for receiving ack process
+	while(1) {
+		receiveACK(rxq,ptemp);
+		sleep(DELAY);
+	}
+	pthread_exit(NULL);	
+}
+
+void receiveACK(QTYPE *queue, QTemp *temp) {
+	//child process for receiving ack
 	struct sockaddr_in srcAddr;
 	int srcLen = sizeof(srcAddr);
 	char string[128];
@@ -97,6 +155,54 @@ void *childProcess(void *threadid) {
 		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) < sizeof(RESPL))
 			error("ERROR: Failed to receive frame from socket.\n");
 		memcpy(rsp,string,sizeof(RESPL));
+		if(rsp->msgno == queue->window[queue->front].msgno) {
+			if(rsp->ack == ACK) {
+				//inc *queue head
+				queue->front++;
+				if(queue->front == WINDOWSIZE) queue->front = 0;
+				queue->count--;
+			}
+			else {				
+ 				//adding to queue send
+ 				while(rxnd->count==WINDOWSIZE);
+ 				rxnd->window[rxnd->rear] = queue->window[queue->front];
+ 				rxnd->rear++;
+ 				if(rxnd->rear==WINDOWSIZE) rxnd->rear=0;
+ 				rxnd->count++;
+			}
+		}
+		else { 
+			unsigned int i=temp->front;
+			unsigned int n=temp->count; 
+			while(n--) {
+				if(temp->tab[i].msgno==queue->window[queue->front].msgno) break;
+				i++;
+				if(i==WINDOWSIZE) i=0;
+			}
+			if(n) {
+				if(temp->tab[i].ack == ACK) {
+					//inc *queue head
+					queue->front++;
+					if(queue->front == WINDOWSIZE) queue->front = 0;
+					queue->count--;
+				}
+				else {				
+ 					//adding to queue send
+ 					while(rxnd->count==WINDOWSIZE);
+ 					rxnd->window[rxnd->rear] = queue->window[queue->front];
+ 					rxnd->rear++;
+ 					if(rxnd->rear==WINDOWSIZE) rxnd->rear=0;
+ 					rxnd->count++;					
+				}
+			}
+			else {
+				//save in QTemp
+				while(temp->count==WINDOWSIZE);
+				temp->tab[temp->rear++] = *rsp;
+				if(temp->rear==WINDOWSIZE) temp->rear = 0;
+				temp->count++;
+			}
+		}
 	}
 	pthread_exit(NULL);
 }

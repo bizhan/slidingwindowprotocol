@@ -77,7 +77,6 @@ MESGB *rcvframe(int sockfd, QTYPE *queue) {
 }
 
 void *childRProcess(void *threadid) {
-	MESGB *current = (MESGB *) malloc(sizeof(MESGB));
  	while(1) {
  		current = q_get(rxq);
  		sleep(DELAY);
