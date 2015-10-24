@@ -31,7 +31,7 @@
 /* Const */ 
 #define BYTESIZE 256 /* The maximum value of a byte */
 #define MAXLEN 1024 /* Maximum messages length */ 
-#define DELAY 500
+#define DELAY 1
 
 #define bzero(p, size) (void)memset((p), 0 , (size))
 

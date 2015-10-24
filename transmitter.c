@@ -28,12 +28,11 @@ QTemp *ptemp = &temp;
 
 /* FLAGS */
 int isSocketOpen;	// flag to indicate if connection from socket is done
-int headError; //indicate error in sending head window
 
 /* VOIDS */
 void *firstChild(void *threadid);
 void *secondChild(void *threadid);
-void receiveACK(QTYPE *queue, QTemp *temp);
+void receiveACK(QTYPE *queue,QTYPE *qsend,QTemp *temp);
 void sendFrame(QTYPE *qsend);
 
 int main(int argc, char *argv[]) {
@@ -72,7 +71,6 @@ int main(int argc, char *argv[]) {
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
 
 	// receiving ack thread
-	headError = 0;
 	if(pthread_create(&thread[1], NULL, secondChild, 0) != 0) 
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
 
@@ -82,7 +80,10 @@ int main(int argc, char *argv[]) {
 		buf[0] = fgetc(tFile);
 		MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter++};
 		strcpy(msg.data, buf);
-		while(trmq.count==WINDOWSIZE); //wait for sending process
+		while(trmq.count==WINDOWSIZE) /*wait for sending process */{
+			printf("waiting receive ACK\n"); 
+			sleep(1);
+		}
  		trmq.window[trmq.rear] = msg;
  		trmq.rear++;
  		if(trmq.rear==WINDOWSIZE) trmq.rear=0;
@@ -128,31 +129,35 @@ void sendFrame(QTYPE *qsend) {
 	if(qsend->count) {
 		printf("Sending frame no. %d: \'%c\'\n", qsend->window[qsend->front].msgno, qsend->window[qsend->front].data[0]);
 		memcpy(string,&qsend->window[qsend->front],sizeof(MESGB));
-		if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) != sizeof(MESGB))
-			error("ERROR: sendto() sent frame with size more than expected.\n");
-		qsend->front++;
-		if(qsend->front==WINDOWSIZE) qsend->front=0;
-		qsend->count--;
+		if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) == sizeof(MESGB)) {
+			qsend->front++;
+			if(qsend->front==WINDOWSIZE) qsend->front=0;
+			qsend->count--;
+		}
+		else error("ERROR: sendto() sent frame with size more than expected.\n");
 	}
 }
 
 void *secondChild(void *threadid) {
 	//this thread used for receiving ack process
 	while(1) {
-		receiveACK(rxq,ptemp);
+		receiveACK(rxq,rxnd,ptemp);
 		sleep(DELAY);
 	}
 	pthread_exit(NULL);	
 }
 
-void receiveACK(QTYPE *queue, QTemp *temp) {
+void receiveACK(QTYPE *queue,QTYPE *qsend, QTemp *temp) {
 	//child process for receiving ack
 	struct sockaddr_in srcAddr;
 	int srcLen = sizeof(srcAddr);
 	char string[128];
 	RESPL *rsp = (RESPL *) malloc(sizeof(RESPL));
-	while (isSocketOpen) {
-		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) < sizeof(RESPL))
+	int wait=0;
+	while (isSocketOpen && wait<1000 && wait>0) {
+		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) == sizeof(RESPL))
+			wait==-1;
+		else 
 			error("ERROR: Failed to receive frame from socket.\n");
 		memcpy(rsp,string,sizeof(RESPL));
 		if(rsp->msgno == queue->window[queue->front].msgno) {
@@ -164,11 +169,11 @@ void receiveACK(QTYPE *queue, QTemp *temp) {
 			}
 			else {				
  				//adding to queue send
- 				while(rxnd->count==WINDOWSIZE);
- 				rxnd->window[rxnd->rear] = queue->window[queue->front];
- 				rxnd->rear++;
- 				if(rxnd->rear==WINDOWSIZE) rxnd->rear=0;
- 				rxnd->count++;
+ 				while(qsend->count==WINDOWSIZE);
+ 				qsend->window[qsend->rear] = queue->window[queue->front];
+ 				qsend->rear++;
+ 				if(qsend->rear==WINDOWSIZE) qsend->rear=0;
+ 				qsend->count++;
 			}
 		}
 		else { 
@@ -179,7 +184,7 @@ void receiveACK(QTYPE *queue, QTemp *temp) {
 				i++;
 				if(i==WINDOWSIZE) i=0;
 			}
-			if(n) {
+			if(n) { //if ack with same msgno found in temp
 				if(temp->tab[i].ack == ACK) {
 					//inc *queue head
 					queue->front++;
@@ -188,11 +193,11 @@ void receiveACK(QTYPE *queue, QTemp *temp) {
 				}
 				else {				
  					//adding to queue send
- 					while(rxnd->count==WINDOWSIZE);
- 					rxnd->window[rxnd->rear] = queue->window[queue->front];
- 					rxnd->rear++;
- 					if(rxnd->rear==WINDOWSIZE) rxnd->rear=0;
- 					rxnd->count++;					
+ 					while(qsend->count==WINDOWSIZE);
+ 					qsend->window[qsend->rear] = queue->window[queue->front];
+ 					qsend->rear++;
+ 					if(qsend->rear==WINDOWSIZE) qsend->rear=0;
+ 					qsend->count++;					
 				}
 			}
 			else {
@@ -203,6 +208,16 @@ void receiveACK(QTYPE *queue, QTemp *temp) {
 				temp->count++;
 			}
 		}
+		usleep(DELAY);
+		wait++;
 	}
-	pthread_exit(NULL);
+	if(wait==1000) {
+		//adding to queue send
+		printf("recv timeout, resending head\n");
+		while(qsend->count==WINDOWSIZE);
+		qsend->window[qsend->rear] = queue->window[queue->front];
+		qsend->rear++;
+		if(qsend->rear==WINDOWSIZE) qsend->rear=0;
+		qsend->count++;	
+	}
 }
