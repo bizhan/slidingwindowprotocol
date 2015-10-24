@@ -59,7 +59,7 @@ boolean FSearch (List L,address P) {
   }
 }
 
-address Search (List L,infotype X) {
+address Search (List L,Byte X) {
 /* Mencari apakah ada elemen list dengan Info(P) = X */
 /* Jika ada, mengirimkan address elemen tersebut */
 /* Jika tidak ada, mengirimkan Nil */
@@ -69,7 +69,7 @@ address Search (List L,infotype X) {
 	else {
 		P = First(L);
 		do {
-			if(Info(P) == X) return P;
+			if(Info(P)->msgno == X) return P;
 			P = Next(P);
 		} while(P!=First(L));
 		return P;
@@ -266,7 +266,7 @@ void PrintInfo (List L) {
 		P = First(L);
 		printf("List : ");
 		do {
-			printf("%d ", Info(P));
+			printf("%d ", Info(P)->msgno);
 			P = Next(P);
 		} while (P != First(L));
 		printf("\n");

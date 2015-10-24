@@ -1,5 +1,5 @@
 /* File 	: transmitter.c */
-#include "header.h"
+#include "List/list2.h"
 
 /* NETWORKS */
 int sockfd, port;		// sock file descriptor and port number
@@ -22,9 +22,8 @@ QTYPE trsend = { 0, 0, 0, WINDOWSIZE, rxsend};
 QTYPE *rxnd = &trsend;
 
 /* QTEMP */
-RESPL tab[WINDOWSIZE];
-QTemp temp = { 0, 0, 0, WINDOWSIZE, tab};
-QTemp *ptemp = &temp;
+List temp;
+List *ptemp = &temp;
 
 /* FLAGS */
 int isSocketOpen;	// flag to indicate if connection from socket is done
@@ -32,7 +31,7 @@ int isSocketOpen;	// flag to indicate if connection from socket is done
 /* VOIDS */
 void *firstChild(void *threadid);
 void *secondChild(void *threadid);
-void receiveACK(QTYPE *queue,QTYPE *qsend,QTemp *temp);
+void receiveACK(QTYPE *queue,QTYPE *qsend,List *temp);
 void sendFrame(QTYPE *qsend);
 
 int main(int argc, char *argv[]) {
@@ -71,6 +70,7 @@ int main(int argc, char *argv[]) {
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
 
 	// receiving ack thread
+	CreateList(ptemp); //make list for collecting ack
 	if(pthread_create(&thread[1], NULL, secondChild, 0) != 0) 
 		error("ERROR: Failed to create thread for child. Please free some space.\n");
 
@@ -80,10 +80,7 @@ int main(int argc, char *argv[]) {
 		buf[0] = fgetc(tFile);
 		MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter++};
 		strcpy(msg.data, buf);
-		while(trmq.count==WINDOWSIZE) /*wait for sending process */{
-			printf("waiting receive ACK\n"); 
-			sleep(1);
-		}
+		while(trmq.count==WINDOWSIZE); /*wait for sending process */
  		trmq.window[trmq.rear] = msg;
  		trmq.rear++;
  		if(trmq.rear==WINDOWSIZE) trmq.rear=0;
@@ -147,23 +144,22 @@ void *secondChild(void *threadid) {
 	pthread_exit(NULL);	
 }
 
-void receiveACK(QTYPE *queue,QTYPE *qsend, QTemp *temp) {
+void receiveACK(QTYPE *queue,QTYPE *qsend, List *temp) {
 	//child process for receiving ack
 	struct sockaddr_in srcAddr;
 	int srcLen = sizeof(srcAddr);
 	char string[128];
 	RESPL *rsp = (RESPL *) malloc(sizeof(RESPL));
-	int wait=0;
+	int wait=1;
 	while (isSocketOpen && wait<1000 && wait>0) {
 		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) == sizeof(RESPL))
-			wait==-1;
+			wait=-1;
 		else 
 			error("ERROR: Failed to receive frame from socket.\n");
 		memcpy(rsp,string,sizeof(RESPL));
 		if(rsp->msgno == queue->window[queue->front].msgno) {
-			if(rsp->ack == ACK) {
-				//inc *queue head
-				queue->front++;
+			if(rsp->ack == ACK) {				
+				queue->front++; //inc *queue head
 				if(queue->front == WINDOWSIZE) queue->front = 0;
 				queue->count--;
 			}
@@ -177,41 +173,30 @@ void receiveACK(QTYPE *queue,QTYPE *qsend, QTemp *temp) {
 			}
 		}
 		else { 
-			unsigned int i=temp->front;
-			unsigned int n=temp->count; 
-			while(n--) {
-				if(temp->tab[i].msgno==queue->window[queue->front].msgno) break;
-				i++;
-				if(i==WINDOWSIZE) i=0;
-			}
-			if(n) { //if ack with same msgno found in temp
-				if(temp->tab[i].ack == ACK) {
-					//inc *queue head
-					queue->front++;
+			address P = Search(*ptemp,rsp->msgno);
+			if(P!=Nil) { //if ack with same msgno found in ptemp
+				if(Info(P)->ack == ACK) {					
+					queue->front++; //inc *queue head
 					if(queue->front == WINDOWSIZE) queue->front = 0;
 					queue->count--;
 				}
-				else {				
- 					//adding to queue send
+				else { //we have to resend the frame  					
  					while(qsend->count==WINDOWSIZE);
- 					qsend->window[qsend->rear] = queue->window[queue->front];
+ 					qsend->window[qsend->rear] = queue->window[queue->front]; //add it to send queue
  					qsend->rear++;
  					if(qsend->rear==WINDOWSIZE) qsend->rear=0;
  					qsend->count++;					
 				}
+				address Pdel;
+				DelAfter(ptemp,&Pdel,Prev(P));
 			}
-			else {
-				//save in QTemp
-				while(temp->count==WINDOWSIZE);
-				temp->tab[temp->rear++] = *rsp;
-				if(temp->rear==WINDOWSIZE) temp->rear = 0;
-				temp->count++;
-			}
+			else InsVLast(ptemp,rsp); //save in ptemp
 		}
 		usleep(DELAY);
 		wait++;
+		printf("waiting for ACK\n"); 
 	}
-	if(wait==1000) {
+	if(wait) {
 		//adding to queue send
 		printf("recv timeout, resending head\n");
 		while(qsend->count==WINDOWSIZE);

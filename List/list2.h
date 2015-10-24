@@ -1,4 +1,9 @@
-//LIST CIRCULAR WITH TWO POINTER
+/*LIST CIRCULAR WITH TWO POINTER 
+Changes due to sliding window ass :
+	1. infotype
+	2. void Search()
+	3.  
+*/
 #ifndef list2_H
 #define list2_H
 #include <stdio.h>
@@ -9,7 +14,7 @@
 #define Nil NULL
 
 /* *** Definisi Type List *** */
-typedef RESPL infotype;
+typedef RESPL *infotype;
 typedef struct tElmtList *address;
 typedef struct tElmtList {
 	infotype info;
@@ -23,7 +28,7 @@ typedef struct {
 }List;
 
 /*selektor*/
-#define Info(P) (P)->info.msgno
+#define Info(P) (P)->info
 #define Prev(P) (P)->prev
 #define Next(P) (P)->next
 #define First(L) ((L).First)
@@ -60,8 +65,8 @@ boolean FSearch (List L,address P);
 /* Mencari apakah ada elemen list yang beralamat P */
 /* Mengirimkan true jika ada, false jika tidak ada */
 
-address Search (List L,infotype X); 
-/* Mencari apakah ada elemen list dengan Info(P); = X */
+address Search (List L,Byte X); 
+/* Mencari apakah ada elemen list dengan Info(P).msgno == X */
 /* Jika ada, mengirimkan address elemen tersebut */
 /* Jika tidak ada, mengirimkan Nil */
 
@@ -132,7 +137,7 @@ void DelAfter ( List *L,address *Pdel,address Prec);
 void PrintInfo (List L);
 /* I.S. List mungkin kosong */
 /* F.S. Jika list tidak kosong, */
-/* Semua info yg disimpan pada elemen list (kecuali dummy); diprint */
+/* Semua info.msgno yg disimpan pada elemen list diprint */
 /* Jika list kosong, hanya menuliskan "list kosong" */
 
 

@@ -68,12 +68,6 @@ typedef struct RESPL {
 	Byte checksum;
 } RESPL;
 
-typedef struct QTemp {
-// used for save sent frame msgno
-	unsigned int count, front, rear, maxsize; 
-	RESPL *tab; 
-} QTemp;
-
 /////////////////////
 
 /* FUNCTIONS AND PROCEDURES */
