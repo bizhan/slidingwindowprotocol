@@ -49,7 +49,6 @@ int main(int argc, char *argv[])
 	MESGB *c;
 	while(1) {
  		c = rcvframe(sockfd, rxq);
- 		printf("this %d : %s\n", rxq->window[rxq->rear].msgno, rxq->window[rxq->rear].data);
  		if(c->data[0] == EOF){
  			endFileReceived = 1;
  			printf("File received.");
@@ -75,10 +74,9 @@ MESGB *rcvframe(int sockfd, QTYPE *queue) {
 
  	//adding frame to buffer and resync the buffer queue
  	if (queue->count < 8) {
- 		printf("qrear : %d qcount : %d\n", queue->rear, queue->count);
  		//queue->rear = (queue->count > 0) ? (++queue->rear) % 8 : queue->rear;
+ 		if(queue->rear >= WINDOWSIZE-1) queue->rear = -1;
  		queue->window[++queue->rear] = *pmsg;
- 		if(queue->rear == WINDOWSIZE) queue->rear = 0;
  		queue->count++;
  	}
  	return pmsg;
@@ -107,7 +105,6 @@ MESGB *q_get(QTYPE *queue) {
  			rsp.ack = ACK;
  			rsp.msgno = current->msgno;
  			rsp.checksum = 0;
- 			printf("nih %d :: %d\n", rsp.msgno, current->msgno);
  			queue->front++;
  			if(queue->front == WINDOWSIZE) queue->front = 0;
  			queue->count--;		
@@ -119,9 +116,9 @@ MESGB *q_get(QTYPE *queue) {
  			rsp.checksum = 0;
 		}		
  		memcpy(string,&rsp,sizeof(RESPL));
- 		printf("nih %d\n", rsp.msgno);
 		if(sendto(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, srcLen) < sizeof(RESPL))
 			error("ERROR: sendto() sent frame with size more than expected.\n");
+		printf("sent frame-%d\n", rsp.msgno);
  	}
  	return current;
 }

@@ -29,6 +29,7 @@ Info(P) = X, Next(P) = Nil */
 	P = (address)malloc(sizeof(infotype));
 	if (P != Nil)
 	{
+		printf("Alokasi Suksess!!\n");
 		Info(P) = X;
 		Next(P) = Nil;
 		Prev(P) = Nil;
