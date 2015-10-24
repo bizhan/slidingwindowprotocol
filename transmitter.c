@@ -150,29 +150,11 @@ void receiveACK(QTYPE *queue,QTYPE *qsend, List *temp) {
 	int srcLen = sizeof(srcAddr);
 	char string[128];
 	RESPL *rsp = (RESPL *) malloc(sizeof(RESPL));
-	int wait=1;
-	while (isSocketOpen && wait<1000 && wait>0) {
-		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) == sizeof(RESPL))
-			wait=-1;
-		else 
-			error("ERROR: Failed to receive frame from socket.\n");
-		memcpy(rsp,string,sizeof(RESPL));
-		if(rsp->msgno == queue->window[queue->front].msgno) {
-			if(rsp->ack == ACK) {				
-				queue->front++; //inc *queue head
-				if(queue->front == WINDOWSIZE) queue->front = 0;
-				queue->count--;
-			}
-			else {				
- 				//adding to queue send
- 				while(qsend->count==WINDOWSIZE);
- 				qsend->window[qsend->rear] = queue->window[queue->front];
- 				qsend->rear++;
- 				if(qsend->rear==WINDOWSIZE) qsend->rear=0;
- 				qsend->count++;
-			}
-		}
-		else { 
+	int wait = 1;
+	while(wait<1000) {
+		if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) == sizeof(RESPL)) {
+			memcpy(rsp,string,sizeof(RESPL));
+			InsVFirst(ptemp,rsp);
 			address P = Search(*ptemp,rsp->msgno);
 			if(P!=Nil) { //if ack with same msgno found in ptemp
 				if(Info(P)->ack == ACK) {					
@@ -190,13 +172,13 @@ void receiveACK(QTYPE *queue,QTYPE *qsend, List *temp) {
 				address Pdel;
 				DelAfter(ptemp,&Pdel,Prev(P));
 			}
-			else InsVLast(ptemp,rsp); //save in ptemp
+			break;
 		}
+		else printf("waiting for ACK\n");
 		usleep(DELAY);
-		wait++;
-		printf("waiting for ACK\n"); 
+		wait+=30;
 	}
-	if(wait) {
+	if(wait>1000) {
 		//adding to queue send
 		printf("recv timeout, resending head\n");
 		while(qsend->count==WINDOWSIZE);
