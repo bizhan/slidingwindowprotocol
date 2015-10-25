@@ -36,8 +36,8 @@
 #define bzero(p, size) (void)memset((p), 0 , (size))
 
 /* Define receive buffer size */
-#define WINDOWSIZE 7
-#define BUFMAX 1	/* Maximum size of buffer that can be sent */
+#define WINDOWSIZE 3
+#define BUFMAX 7	/* Maximum size of buffer that can be sent */
 
 
 typedef unsigned char Byte;
@@ -50,7 +50,7 @@ typedef struct MESGB {
  	unsigned int etx;
  	Byte checksum;
  	Byte msgno;
- 	char data[1];
+ 	char data[BUFMAX];
 } MESGB;
 
 typedef struct QTYPE {

@@ -77,7 +77,10 @@ int main(int argc, char *argv[]) {
 	// parent process
 	int counter = 0;
 	while(1) {
-		buf[0] = fgetc(tFile);
+		int i=0;
+		do {
+			buf[i++] = fgetc(tFile);
+		} while(i<BUFMAX && buf[0]!=EOF);
 		MESGB msg = { .soh = SOH, .stx = STX, .etx = ETX, .checksum = 0, .msgno = counter++};
 		strcpy(msg.data, buf);
 		while(trmq.count==WINDOWSIZE); /*wait for sending process */
@@ -91,7 +94,7 @@ int main(int argc, char *argv[]) {
  		trsend.rear++;
  		if(trsend.rear>WINDOWSIZE) trsend.rear=0;
  		trsend.count++;
-		sleep(3*DELAY);
+		sleep(DELAY);
 		if(buf[0]==EOF) break;
 	}
 
@@ -123,11 +126,11 @@ void *firstChild(void *threadid) {
 void sendFrame(QTYPE *queue,QTYPE *qsend) {
 	//child process for sending frame
 	int time=0;
-	while(qsend->count==0 && (++time)<2000) {
+	while(qsend->count==0 && (++time)<1500) {
 		usleep(DELAY);
-		if(!time%1500) printf("waiting for ACK,\n");
+		if(!time%800) printf("waiting for ACK,\n");
 	}
-	if(time==2000) {
+	if(time==1500) {
 		//adding to queue send
 		printf("recv timeout, resending HEAD\n");
 		while(qsend->count==WINDOWSIZE);
@@ -139,12 +142,11 @@ void sendFrame(QTYPE *queue,QTYPE *qsend) {
 	char string[128];
 	printf("Sending frame no. %d: \'%c\'\n",qsend->window[qsend->front].msgno,qsend->window[qsend->front].data[0]);
 	memcpy(string,&qsend->window[qsend->front],sizeof(MESGB));
-	if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) == sizeof(MESGB)) {
-	}
-	else error("ERROR: sendto() sent frame with size more than expected.\n");
-		qsend->front++;
-		if(qsend->front>WINDOWSIZE) qsend->front=0;
-		qsend->count--;
+	if(sendto(sockfd, string, sizeof(MESGB), 0, (const struct sockaddr *) &receiverAddr, receiverAddrLen) > sizeof(MESGB)) 
+		error("ERROR: sendto() sent frame with size more than expected.\n");
+	qsend->front++;
+	if(qsend->front>WINDOWSIZE) qsend->front=0;
+	qsend->count--;
 }
 
 void *secondChild(void *threadid) {
@@ -163,12 +165,12 @@ void receiveACK(QTYPE *queue,QTYPE *qsend, List *temp) {
 	char string[128];
 	RESPL *rsp = (RESPL *) malloc(sizeof(RESPL));
 	int wait = 1;
-	if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) == sizeof(RESPL)) {
+	if(recvfrom(sockfd, string, sizeof(RESPL), 0, (struct sockaddr *) &srcAddr, &srcLen) <= sizeof(RESPL)) {
 		memcpy(rsp,string,sizeof(RESPL));
 		InsVFirst(ptemp,rsp);
 		address P = Search(*ptemp,rsp->msgno);
 		if(P!=Nil) { //if ack with same msgno found in ptemp
-			if(Info(P)->ack == ACK) {					
+			if(Info(P)->ack == ACK) {
 				queue->front++; //inc *queue head
 				if(queue->front == WINDOWSIZE) queue->front = 0;
 				queue->count--;
